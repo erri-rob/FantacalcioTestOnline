@@ -1,0 +1,19 @@
+python3 -c "import csv, json; inp='/Users/robertoerrico/Documents/Progetti/FantacalcioTestOnline/Listone_Fantapazz.csv'; out='/Users/robertoerrico/Documents/Progetti/FantacalcioTestOnline/Listone_Fantapazz.json';
+with open(inp, newline='', encoding='utf-8-sig') as f:
+    reader = csv.DictReader(f, delimiter=';')
+    data = []
+    for row in reader:
+        if not any(row.values()):
+            continue
+        # normalize header BOM if any sneaks in
+        if '\ufeffRuolo' in row:
+            row['Ruolo'] = row.pop('\ufeffRuolo')
+        # normalize numeric field
+        q = row.get('Quotazione')
+        try:
+            row['Quotazione'] = int(q) if q is not None and q != '' else None
+        except ValueError:
+            pass
+        data.append(row)
+with open(out, 'w', encoding='utf-8') as g:
+    json.dump(data, g, ensure_ascii=False, indent=2)"

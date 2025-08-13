@@ -204,7 +204,6 @@ function init() {
   const undoBtn = document.getElementById("undoBtn");
   const resetBtn = document.getElementById("resetBtn");
   const meSelect = document.getElementById("meSelect");
-  const setMeBtn = document.getElementById("setMeBtn");
   const meStatus = document.getElementById("meStatus");
 
   let allPlayers = [];
@@ -250,7 +249,8 @@ function init() {
 
   // --- Google Sheets / Apps Script backend ---
   function initSheetsSync() {
-    meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
+    const selectedMe = meSelect.value;
+    meStatus.textContent = selectedMe ? `Online (Sheets): ${selectedMe}` : `Online (Sheets)`;
     const baseUrl = window.sheetsScriptUrl;
 
     // Polling per stati remoti ogni 2s
@@ -321,7 +321,8 @@ function init() {
   if (sheetsAvailable()) {
     initSheetsSync();
   } else {
-    meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
+    const selectedMe = meSelect.value;
+    meStatus.textContent = selectedMe ? `Solo locale: ${selectedMe}` : `Solo locale`;
   }
 
   // --- Event listeners ---
@@ -339,7 +340,8 @@ function init() {
   meSelect.innerHTML = FRIENDS_ORDER_ROUND_1.map(name => `<option value="${name}">${name}</option>`).join("");
   if (me) meSelect.value = me;
 
-  setMeBtn.addEventListener("click", () => {
+  // Update status when me select changes
+  meSelect.addEventListener("change", () => {
     me = meSelect.value;
     localStorage.setItem("fantadraft_me", me);
     if (sheetsAvailable()) {
@@ -373,8 +375,9 @@ function init() {
     }
 
     // Enforce turno: puoi scegliere solo se sei il currentUser
-    if (me && me !== currentUser) {
-      alert(`Tocca a ${currentUser}. Tu sei ${me}.`);
+    const selectedMe = meSelect.value;
+    if (selectedMe && selectedMe !== currentUser) {
+      alert(`Tocca a ${currentUser}. Tu sei ${selectedMe}.`);
       return;
     }
 
@@ -386,7 +389,8 @@ function init() {
     if (state.takenPlayers.length === 0) return;
     const last = state.takenPlayers[state.takenPlayers.length - 1];
     // Only allow undo if sei tu l'ultimo aver scelto (quando me è settato)
-    if (me && last.by !== me) {
+    const selectedMe = meSelect.value;
+    if (selectedMe && last.by !== selectedMe) {
       alert(`L'ultima scelta è di ${last.by}. Solo lui può annullare.`);
       return;
     }
