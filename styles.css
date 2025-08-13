@@ -104,8 +104,13 @@ input::placeholder { color: #82969e; }
 
 .board-card.current-turn {
   border-color: var(--primary);
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1);
   background: linear-gradient(180deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02));
+  /* Fallback per Safari */
+  -webkit-box-shadow: 0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1);
+  /* Alternativa per Safari se box-shadow non funziona */
+  outline: 2px solid rgba(16, 185, 129, 0.3);
+  outline-offset: 2px;
 }
 .board-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .board-title { font-weight: 600; }
