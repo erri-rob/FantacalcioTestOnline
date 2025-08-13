@@ -434,7 +434,7 @@ function init() {
     
     if (!confirm("Sei sicuro di voler annullare l'ultima scelta?")) return;
     applyUndo();
-  });
+  }); // Updated: removed user check, added password protection
 
   resetBtn.addEventListener("click", () => {
     const password = prompt("Inserisci la password per resettare il draft:");
