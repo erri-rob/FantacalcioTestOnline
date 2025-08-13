@@ -394,7 +394,12 @@ function init() {
   });
 
   resetBtn.addEventListener("click", () => {
-    if (!confirm("Sei sicuro di voler resettare il draft?")) return;
+    const password = prompt("Inserisci la password per resettare il draft:");
+    if (password !== "fantapazz") {
+      alert("Password errata. Reset annullato.");
+      return;
+    }
+    if (!confirm("Sei sicuro di voler resettare il draft? Questa azione non può essere annullata.")) return;
     applyReset();
   });
 }
