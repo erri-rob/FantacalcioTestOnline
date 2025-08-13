@@ -427,6 +427,10 @@ function init() {
     }
 
     console.log("Chiamando applyPick con:", { player, by: currentUser });
+    
+    // Mostra avviso di conferma
+    alert(`Scelta salvata! ${player.name} (${player.role}) è stato selezionato da ${currentUser}.\n\nAttendi qualche secondo per far aggiornare il sistema.`);
+    
     applyPick({ player, by: currentUser });
   });
 
