@@ -157,6 +157,7 @@ function updateStatus(state) {
   const roundEl = document.getElementById("currentRound");
   const pickEl = document.getElementById("currentPick");
   const confirmBtn = document.getElementById("confirmBtn");
+  const undoBtn = document.getElementById("undoBtn");
 
   if (isDraftCompleted(state)) {
     userEl.textContent = "Completato";
@@ -164,12 +165,14 @@ function updateStatus(state) {
     pickEl.textContent = `${order.length}/${order.length}`;
     confirmBtn.disabled = true;
     confirmBtn.textContent = "Draft completato";
+    undoBtn.style.display = "none"; // Nascondi "Annulla ultima"
   } else {
     userEl.textContent = order[state.pickIndex] || "–";
     roundEl.textContent = String(state.round);
     pickEl.textContent = `${state.pickIndex + 1}/${order.length}`;
     confirmBtn.disabled = false;
     confirmBtn.textContent = "Conferma scelta";
+    undoBtn.style.display = ""; // Mostra "Annulla ultima"
   }
 }
 
