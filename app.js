@@ -218,6 +218,39 @@ function init() {
     return Boolean(window.sheetsScriptUrl);
   }
 
+  // --- Core action functions (defined first) ---
+  function applyPick({ player, by }) {
+    console.log("applyPick chiamata con:", { player, by });
+    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+    nextTurn(state);
+    saveState(state);
+    clearInputs();
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  }
+
+  function applyUndo() {
+    console.log("applyUndo chiamata");
+    state.takenPlayers.pop();
+    prevTurn(state);
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  }
+
+  function applyReset() {
+    console.log("applyReset chiamata");
+    state.round = 1;
+    state.pickIndex = 0;
+    state.takenPlayers = [];
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  }
+
   // --- Google Sheets / Apps Script backend ---
   function initSheetsSync() {
     meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
@@ -258,34 +291,21 @@ function init() {
     }
 
     // Override actions to write to Google Sheets
+    const originalApplyPick = applyPick;
+    const originalApplyUndo = applyUndo;
+    const originalApplyReset = applyReset;
+
     applyPick = ({ player, by }) => {
-      state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-      nextTurn(state);
-      saveState(state);
+      originalApplyPick({ player, by });
       pushToRemote(state);
-      clearInputs();
-      populateSelectors(computeAvailablePlayers(allPlayers, state));
-      updateStatus(state);
-      buildBoards(boardsRoot, state);
     };
     applyUndo = () => {
-      state.takenPlayers.pop();
-      prevTurn(state);
-      saveState(state);
+      originalApplyUndo();
       pushToRemote(state);
-      populateSelectors(computeAvailablePlayers(allPlayers, state));
-      updateStatus(state);
-      buildBoards(boardsRoot, state);
     };
     applyReset = () => {
-      state.round = 1;
-      state.pickIndex = 0;
-      state.takenPlayers = [];
-      saveState(state);
+      originalApplyReset();
       pushToRemote(state);
-      populateSelectors(computeAvailablePlayers(allPlayers, state));
-      updateStatus(state);
-      buildBoards(boardsRoot, state);
     };
   }
 
@@ -339,36 +359,21 @@ function init() {
       }
 
       // Override actions using remote when online
+      const originalApplyPick = applyPick;
+      const originalApplyUndo = applyUndo;
+      const originalApplyReset = applyReset;
+
       applyPick = ({ player, by }) => {
-        state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-        nextTurn(state);
-        saveState(state);
+        originalApplyPick({ player, by });
         pushToRemote(state);
-        clearInputs();
-        populateSelectors(computeAvailablePlayers(allPlayers, state));
-        updateStatus(state);
-        buildBoards(boardsRoot, state);
       };
-
       applyUndo = () => {
-        state.takenPlayers.pop();
-        prevTurn(state);
-        saveState(state);
+        originalApplyUndo();
         pushToRemote(state);
-        populateSelectors(computeAvailablePlayers(allPlayers, state));
-        updateStatus(state);
-        buildBoards(boardsRoot, state);
       };
-
       applyReset = () => {
-        state.round = 1;
-        state.pickIndex = 0;
-        state.takenPlayers = [];
-        saveState(state);
+        originalApplyReset();
         pushToRemote(state);
-        populateSelectors(computeAvailablePlayers(allPlayers, state));
-        updateStatus(state);
-        buildBoards(boardsRoot, state);
       };
     }).catch(err => {
       console.error("Firebase init error", err);
@@ -376,36 +381,7 @@ function init() {
     });
   }
 
-  // Local-only fallback implementations (shadowed if online)
-  let applyPick = ({ player, by }) => {
-    console.log("applyPick locale chiamata con:", { player, by });
-    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-    nextTurn(state);
-    saveState(state);
-    clearInputs();
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  let applyUndo = () => {
-    console.log("applyUndo locale chiamata");
-    state.takenPlayers.pop();
-    prevTurn(state);
-    saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  let applyReset = () => {
-    console.log("applyReset locale chiamata");
-    state.round = 1;
-    state.pickIndex = 0;
-    state.takenPlayers = [];
-    saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
+
 
   // --- Initialize sync layer ---
   let unsub = null;
