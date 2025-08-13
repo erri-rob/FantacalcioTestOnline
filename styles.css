@@ -137,7 +137,6 @@ input::placeholder { color: #82969e; }
 .player-meta { color: var(--muted); font-size: 12px; }
 
 @media (min-width: 720px) {
-  .picker-controls { grid-template-columns: 1fr 1fr; }
   .boards-grid { grid-template-columns: 1fr 1fr; }
 }
 

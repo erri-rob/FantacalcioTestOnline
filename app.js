@@ -129,25 +129,13 @@ function computeAvailablePlayers(allPlayers, state) {
 
 function populateSelectors(players) {
   const datalist = document.getElementById("playersDatalist");
-  const select = document.getElementById("playerSelect");
   datalist.innerHTML = "";
-  select.innerHTML = "";
-
-  const defaultOption = document.createElement("option");
-  defaultOption.value = "";
-  defaultOption.textContent = "— Seleziona —";
-  select.appendChild(defaultOption);
 
   players.forEach(p => {
     const option = document.createElement("option");
     option.value = p.name;
-    option.textContent = `${p.name} (${p.role}${p.team ? " · " + p.team : ""})`;
-    select.appendChild(option);
-
-    const option2 = document.createElement("option");
-    option2.value = p.name;
-    option2.label = `${p.name} (${p.role}${p.team ? " · " + p.team : ""})`;
-    datalist.appendChild(option2);
+    option.label = `${p.name} (${p.role}${p.team ? " · " + p.team : ""})`;
+    datalist.appendChild(option);
   });
 }
 
@@ -178,16 +166,11 @@ function updateStatus(state) {
 
 function getSelectedPlayerName() {
   const search = document.getElementById("playerSearch");
-  const select = document.getElementById("playerSelect");
-  const typed = search.value.trim();
-  if (typed) return typed;
-  const selected = select.value.trim();
-  return selected || "";
+  return search.value.trim();
 }
 
 function clearInputs() {
   document.getElementById("playerSearch").value = "";
-  document.getElementById("playerSelect").value = "";
 }
 
 function nextTurn(state) {
