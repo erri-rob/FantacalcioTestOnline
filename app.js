@@ -210,6 +210,214 @@ function init() {
   let allPlayers = [];
   let me = localStorage.getItem("fantadraft_me") || "";
 
+  // --- Helper functions ---
+  function firebaseAvailable() {
+    return Boolean(window.firebaseConfig);
+  }
+  function sheetsAvailable() {
+    return Boolean(window.sheetsScriptUrl);
+  }
+
+  // --- Google Sheets / Apps Script backend ---
+  function initSheetsSync() {
+    meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
+    const baseUrl = window.sheetsScriptUrl;
+
+    // Polling per stati remoti ogni 2s
+    const poll = async () => {
+      try {
+        const res = await fetch(`${baseUrl}?room=${encodeURIComponent(ROOM_ID)}&action=get`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('resp');
+        const data = await res.json();
+        if (!data || !data.state) return;
+        const remote = data.state;
+        const remoteLen = Array.isArray(remote.takenPlayers) ? remote.takenPlayers.length : 0;
+        const localLen = state.takenPlayers.length;
+        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
+          state.round = remote.round ?? 1;
+          state.pickIndex = remote.pickIndex ?? 0;
+          state.takenPlayers = Array.isArray(remote.takenPlayers) ? remote.takenPlayers : [];
+          saveState(state);
+          populateSelectors(computeAvailablePlayers(allPlayers, state));
+          updateStatus(state);
+          buildBoards(boardsRoot, state);
+        }
+      } catch {}
+    };
+    const pollId = setInterval(poll, 2000);
+    poll();
+
+    async function pushToRemote(newState) {
+      try {
+        await fetch(baseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room: ROOM_ID, action: 'set', state: newState })
+        });
+      } catch {}
+    }
+
+    // Override actions to write to Google Sheets
+    applyPick = ({ player, by }) => {
+      state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+      nextTurn(state);
+      saveState(state);
+      pushToRemote(state);
+      clearInputs();
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    };
+    applyUndo = () => {
+      state.takenPlayers.pop();
+      prevTurn(state);
+      saveState(state);
+      pushToRemote(state);
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    };
+    applyReset = () => {
+      state.round = 1;
+      state.pickIndex = 0;
+      state.takenPlayers = [];
+      saveState(state);
+      pushToRemote(state);
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    };
+  }
+
+  // --- Firebase backend ---
+  function initFirebaseSync() {
+    meStatus.textContent = me ? `Online: ${me}` : `Online`;
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js").then(() =>
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js")
+    ).then(() => import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js")).then(() => {
+      const app = firebase.initializeApp(window.firebaseConfig);
+      const db = firebase.firestore();
+      const auth = firebase.auth();
+
+      auth.signInAnonymously().catch(() => {});
+
+      const docRef = db.collection("fantadraft_rooms").doc(ROOM_ID);
+
+      // Subscribe remote changes
+      unsub = docRef.onSnapshot(snap => {
+        const data = snap.data();
+        if (!data) return;
+        const remote = {
+          round: data.round ?? 1,
+          pickIndex: data.pickIndex ?? 0,
+          takenPlayers: Array.isArray(data.takenPlayers) ? data.takenPlayers : []
+        };
+        // If remote is newer, adopt it
+        const localLen = state.takenPlayers.length;
+        const remoteLen = remote.takenPlayers.length;
+        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
+          state.round = remote.round;
+          state.pickIndex = remote.pickIndex;
+          state.takenPlayers = remote.takenPlayers;
+          saveState(state);
+          populateSelectors(computeAvailablePlayers(allPlayers, state));
+          updateStatus(state);
+          buildBoards(boardsRoot, state);
+        }
+      });
+
+      // Bootstrap doc if missing
+      docRef.get().then(snap => {
+        if (!snap.exists) {
+          docRef.set({ round: state.round, pickIndex: state.pickIndex, takenPlayers: state.takenPlayers });
+        }
+      });
+
+      // Write helpers
+      function pushToRemote(newState) {
+        docRef.set({ round: newState.round, pickIndex: newState.pickIndex, takenPlayers: newState.takenPlayers });
+      }
+
+      // Override actions using remote when online
+      applyPick = ({ player, by }) => {
+        state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+        nextTurn(state);
+        saveState(state);
+        pushToRemote(state);
+        clearInputs();
+        populateSelectors(computeAvailablePlayers(allPlayers, state));
+        updateStatus(state);
+        buildBoards(boardsRoot, state);
+      };
+
+      applyUndo = () => {
+        state.takenPlayers.pop();
+        prevTurn(state);
+        saveState(state);
+        pushToRemote(state);
+        populateSelectors(computeAvailablePlayers(allPlayers, state));
+        updateStatus(state);
+        buildBoards(boardsRoot, state);
+      };
+
+      applyReset = () => {
+        state.round = 1;
+        state.pickIndex = 0;
+        state.takenPlayers = [];
+        saveState(state);
+        pushToRemote(state);
+        populateSelectors(computeAvailablePlayers(allPlayers, state));
+        updateStatus(state);
+        buildBoards(boardsRoot, state);
+      };
+    }).catch(err => {
+      console.error("Firebase init error", err);
+      meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
+    });
+  }
+
+  // Local-only fallback implementations (shadowed if online)
+  let applyPick = ({ player, by }) => {
+    console.log("applyPick locale chiamata con:", { player, by });
+    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+    nextTurn(state);
+    saveState(state);
+    clearInputs();
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  let applyUndo = () => {
+    console.log("applyUndo locale chiamata");
+    state.takenPlayers.pop();
+    prevTurn(state);
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  let applyReset = () => {
+    console.log("applyReset locale chiamata");
+    state.round = 1;
+    state.pickIndex = 0;
+    state.takenPlayers = [];
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+
+  // --- Initialize sync layer ---
+  let unsub = null;
+  if (sheetsAvailable()) {
+    initSheetsSync();
+  } else if (firebaseAvailable()) {
+    initFirebaseSync();
+  } else {
+    meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
+  }
+
+  // --- Event listeners ---
   fetchPlayers().then(players => {
     allPlayers = players;
     const available = computeAvailablePlayers(allPlayers, state);
@@ -235,7 +443,6 @@ function init() {
       meStatus.textContent = `Solo locale: ${me}`;
     }
   });
-
 
   confirmBtn.addEventListener("click", () => {
     console.log("Conferma cliccata");
@@ -285,216 +492,7 @@ function init() {
     if (!confirm("Sei sicuro di voler resettare il draft?")) return;
     applyReset();
   });
-  
-  // --- Sync Layer ---
-  function firebaseAvailable() {
-    return Boolean(window.firebaseConfig);
-  }
-  function sheetsAvailable() {
-    return Boolean(window.sheetsScriptUrl);
-  }
-
-  // Local-only fallback implementations (shadowed if online)
-  let applyPick = ({ player, by }) => {
-    console.log("applyPick locale chiamata con:", { player, by });
-    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-    nextTurn(state);
-    saveState(state);
-    clearInputs();
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  let applyUndo = () => {
-    console.log("applyUndo locale chiamata");
-    state.takenPlayers.pop();
-    prevTurn(state);
-    saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  let applyReset = () => {
-    console.log("applyReset locale chiamata");
-    state.round = 1;
-    state.pickIndex = 0;
-    state.takenPlayers = [];
-    saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-
-  let unsub = null;
-  if (sheetsAvailable()) {
-    initSheetsSync();
-  } else if (firebaseAvailable()) {
-    initFirebaseSync();
-  } else {
-    meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
-  }
-
-  // --- Google Sheets / Apps Script backend ---
-  function initSheetsSync() {
-    meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
-    const baseUrl = window.sheetsScriptUrl;
-
-    // Polling per stati remoti ogni 2s
-    const poll = async () => {
-      try {
-        const res = await fetch(`${baseUrl}?room=${encodeURIComponent(ROOM_ID)}&action=get`, { cache: 'no-store' });
-        if (!res.ok) throw new Error('resp');
-        const data = await res.json();
-        if (!data || !data.state) return;
-        const remote = data.state;
-        const remoteLen = Array.isArray(remote.takenPlayers) ? remote.takenPlayers.length : 0;
-        const localLen = state.takenPlayers.length;
-        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
-          state.round = remote.round ?? 1;
-          state.pickIndex = remote.pickIndex ?? 0;
-          state.takenPlayers = Array.isArray(remote.takenPlayers) ? remote.takenPlayers : [];
-          saveState(state);
-          populateSelectors(computeAvailablePlayers(allPlayers, state));
-          updateStatus(state);
-          buildBoards(boardsRoot, state);
-        }
-      } catch {}
-    };
-    const pollId = setInterval(poll, 2000);
-    poll();
-
-    async function pushToRemote(newState) {
-      try {
-        await fetch(baseUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ room: ROOM_ID, action: 'set', state: newState })
-        });
-      } catch {}
-    }
-
-    // Wire actions
-    applyPick = ({ player, by }) => {
-      state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-      nextTurn(state);
-      saveState(state);
-      pushToRemote(state);
-      clearInputs();
-      populateSelectors(computeAvailablePlayers(allPlayers, state));
-      updateStatus(state);
-      buildBoards(boardsRoot, state);
-    };
-    applyUndo = () => {
-      state.takenPlayers.pop();
-      prevTurn(state);
-      saveState(state);
-      pushToRemote(state);
-      populateSelectors(computeAvailablePlayers(allPlayers, state));
-      updateStatus(state);
-      buildBoards(boardsRoot, state);
-    };
-    applyReset = () => {
-      state.round = 1;
-      state.pickIndex = 0;
-      state.takenPlayers = [];
-      saveState(state);
-      pushToRemote(state);
-      populateSelectors(computeAvailablePlayers(allPlayers, state));
-      updateStatus(state);
-      buildBoards(boardsRoot, state);
-    };
-  }
-
-  function initFirebaseSync() {
-    meStatus.textContent = me ? `Online: ${me}` : `Online`;
-    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js").then(() =>
-      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js")
-    ).then(() => import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js")).then(() => {
-      const app = firebase.initializeApp(window.firebaseConfig);
-      const db = firebase.firestore();
-      const auth = firebase.auth();
-
-      auth.signInAnonymously().catch(() => {});
-
-      const docRef = db.collection("fantadraft_rooms").doc(ROOM_ID);
-
-      // Subscribe remote changes
-      unsub = docRef.onSnapshot(snap => {
-        const data = snap.data();
-        if (!data) return;
-        const remote = {
-          round: data.round ?? 1,
-          pickIndex: data.pickIndex ?? 0,
-          takenPlayers: Array.isArray(data.takenPlayers) ? data.takenPlayers : []
-        };
-        // If remote is newer, adopt it
-        const localLen = state.takenPlayers.length;
-        const remoteLen = remote.takenPlayers.length;
-        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
-          state.round = remote.round;
-          state.pickIndex = remote.pickIndex;
-          state.takenPlayers = remote.takenPlayers;
-          saveState(state);
-          populateSelectors(computeAvailablePlayers(allPlayers, state));
-          updateStatus(state);
-          buildBoards(boardsRoot, state);
-        }
-      });
-
-      // Bootstrap doc if missing
-      docRef.get().then(snap => {
-        if (!snap.exists) {
-          docRef.set({ round: state.round, pickIndex: state.pickIndex, takenPlayers: state.takenPlayers });
-        }
-      });
-
-      // Write helpers
-      function pushToRemote(newState) {
-        docRef.set({ round: newState.round, pickIndex: newState.pickIndex, takenPlayers: newState.takenPlayers });
-      }
-
-      // Expose actions using remote when online
-      applyPick = ({ player, by }) => {
-        state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-        nextTurn(state);
-        saveState(state);
-        pushToRemote(state);
-        clearInputs();
-        populateSelectors(computeAvailablePlayers(allPlayers, state));
-        updateStatus(state);
-        buildBoards(boardsRoot, state);
-      };
-
-      applyUndo = () => {
-        state.takenPlayers.pop();
-        prevTurn(state);
-        saveState(state);
-        pushToRemote(state);
-        populateSelectors(computeAvailablePlayers(allPlayers, state));
-        updateStatus(state);
-        buildBoards(boardsRoot, state);
-      };
-
-      applyReset = () => {
-        state.round = 1;
-        state.pickIndex = 0;
-        state.takenPlayers = [];
-        saveState(state);
-        pushToRemote(state);
-        populateSelectors(computeAvailablePlayers(allPlayers, state));
-        updateStatus(state);
-        buildBoards(boardsRoot, state);
-      };
-    }).catch(err => {
-      console.error("Firebase init error", err);
-      meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
-    });
-  }
-
-
 }
-
-
 
 document.addEventListener("DOMContentLoaded", init);
 
