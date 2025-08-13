@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Draft Fantacalcio - Selezione Giocatori</title>
+    <meta name="description" content="Draft fantacalcio a turni con ricerca giocatori e gestione ordine picks.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#0ea5a0"></circle><circle cx="12" cy="12" r="8" fill="white"></circle><circle cx="12" cy="12" r="6" fill="#0ea5a0"></circle></svg>
+        <div class="titles">
+          <h1>Draft Fantacalcio</h1>
+          <p class="subtitle">Selezione giocatori a turni, semplice e veloce</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="status-card">
+        <div class="status-row">
+          <div>
+            <div class="status-label">Turno corrente</div>
+            <div class="status-value" id="currentUser">–</div>
+          </div>
+          <div>
+            <div class="status-label">Round</div>
+            <div class="status-value" id="currentRound">–</div>
+          </div>
+          <div>
+            <div class="status-label">Pick</div>
+            <div class="status-value" id="currentPick">–</div>
+          </div>
+        </div>
+        <div class="me-row">
+          <div class="field">
+            <label for="meSelect">Tu sei</label>
+            <select id="meSelect"></select>
+          </div>
+          <button id="setMeBtn" class="btn">Imposta</button>
+          <div id="meStatus" class="pill">Solo locale</div>
+          <div class="field" style="min-width:240px;">
+            <label for="ghToken">GitHub token (solo admin)</label>
+            <input id="ghToken" type="password" placeholder="ghp_xxx (opzionale)" />
+          </div>
+          <button id="setGhBtn" class="btn">Usa token</button>
+        </div>
+      </section>
+
+      <section class="picker">
+        <h2>Seleziona un giocatore</h2>
+        <div class="picker-controls">
+          <div class="field">
+            <label for="playerSearch">Cerca per nome</label>
+            <input id="playerSearch" list="playersDatalist" placeholder="Inizia a digitare..." autocomplete="off" />
+            <datalist id="playersDatalist"></datalist>
+          </div>
+          <div class="field">
+            <label for="playerSelect">Oppure scegli dal menu in ordine alfabetico</label>
+            <select id="playerSelect"></select>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="confirmBtn" class="btn primary">Conferma scelta</button>
+          <button id="undoBtn" class="btn">Annulla ultima</button>
+          <button id="resetBtn" class="btn danger">Reset draft</button>
+        </div>
+        <p class="hint">Nota: può scegliere solo la persona di turno. I giocatori già scelti spariscono dall'elenco.</p>
+      </section>
+
+      <section class="boards">
+        <h2>Bacheca scelte</h2>
+        <div id="boards" class="boards-grid"></div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>Realizzato per il tuo gruppo di fantacalcio • Mobile friendly • Dati da <code>Listone_Fantapazz.json</code></p>
+    </footer>
+
+    <script src="./firebaseConfig.js"></script>
+    <script src="./backendConfig.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+  </html>
+
+

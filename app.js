@@ -1,0 +1,630 @@
+const FRIENDS_ORDER_ROUND_1 = [
+  "Dario",
+  "Roberto",
+  "Giovanni",
+  "Peppe",
+  "Francesco",
+  "Luigi",
+  "Pasquale",
+  "Antonio",
+  "Luca",
+  "Carmine"
+];
+
+const FRIENDS_ORDER_ROUND_2 = [
+  "Carmine",
+  "Luca",
+  "Antonio",
+  "Pasquale",
+  "Luigi",
+  "Francesco",
+  "Peppe",
+  "Giovanni",
+  "Roberto",
+  "Dario"
+];
+
+const STORAGE_KEY = "fantadraft_state_v1";
+const ROOM_ID = "lega-2024"; // stesso id per tutti i 10 amici
+
+/**
+ * Shape: {
+ *   round: 1 | 2,
+ *   pickIndex: number, // 0..9
+ *   takenPlayers: Array<{ name: string, role: string, team: string, by: string }>
+ * }
+ */
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { round: 1, pickIndex: 0, takenPlayers: [] };
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") throw new Error("bad state");
+    return parsed;
+  } catch {
+    return { round: 1, pickIndex: 0, takenPlayers: [] };
+  }
+}
+
+function saveState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function getCurrentOrder(round) {
+  return round === 1 ? FRIENDS_ORDER_ROUND_1 : FRIENDS_ORDER_ROUND_2;
+}
+
+async function fetchPlayers() {
+  const response = await fetch("./Listone_Fantapazz.json", { cache: "no-store" });
+  if (!response.ok) throw new Error("Impossibile caricare Listone_Fantapazz.json");
+  /** @type {{Ruolo:string, Calciatore:string, Squadra:string, Quotazione:number}[]} */
+  const data = await response.json();
+  const normalized = data
+    .filter(p => p && p.Calciatore)
+    .map(p => ({
+      name: String(p.Calciatore).trim(),
+      role: String(p.Ruolo || "").trim(),
+      team: String(p.Squadra || "").trim(),
+      price: Number(p.Quotazione ?? 0)
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "it"));
+  return normalized;
+}
+
+function buildBoards(rootEl, state) {
+  const allFriends = FRIENDS_ORDER_ROUND_1; // names list base
+  rootEl.innerHTML = "";
+  allFriends.forEach(friend => {
+    const picks = state.takenPlayers.filter(tp => tp.by === friend);
+    const card = document.createElement("div");
+    card.className = "board-card";
+    card.innerHTML = `
+      <div class="board-header">
+        <div class="board-title">${friend}</div>
+        <div class="pill">${picks.length} scelte</div>
+      </div>
+      <div class="picks-list">${picks
+        .map(
+          (p, idx) => `
+            <div class="pick-item">
+              <span class="badge">${p.role}</span>
+              <span class="player-name">${p.name}</span>
+              <span class="player-meta">${p.team || ""}</span>
+            </div>
+          `
+        )
+        .join("")}
+      </div>
+    `;
+    rootEl.appendChild(card);
+  });
+}
+
+function isDraftCompleted(state) {
+  const totalSlots = FRIENDS_ORDER_ROUND_1.length * 2;
+  return state.takenPlayers.length >= totalSlots;
+}
+
+function computeAvailablePlayers(allPlayers, state) {
+  const takenNames = new Set(state.takenPlayers.map(tp => tp.name));
+  return allPlayers.filter(p => !takenNames.has(p.name));
+}
+
+function populateSelectors(players) {
+  const datalist = document.getElementById("playersDatalist");
+  const select = document.getElementById("playerSelect");
+  datalist.innerHTML = "";
+  select.innerHTML = "";
+
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "— Seleziona —";
+  select.appendChild(defaultOption);
+
+  players.forEach(p => {
+    const option = document.createElement("option");
+    option.value = p.name;
+    option.textContent = `${p.name} (${p.role}${p.team ? " · " + p.team : ""})`;
+    select.appendChild(option);
+
+    const option2 = document.createElement("option");
+    option2.value = p.name;
+    option2.label = `${p.name} (${p.role}${p.team ? " · " + p.team : ""})`;
+    datalist.appendChild(option2);
+  });
+}
+
+function updateStatus(state) {
+  const order = getCurrentOrder(state.round);
+  const userEl = document.getElementById("currentUser");
+  const roundEl = document.getElementById("currentRound");
+  const pickEl = document.getElementById("currentPick");
+  const confirmBtn = document.getElementById("confirmBtn");
+
+  if (isDraftCompleted(state)) {
+    userEl.textContent = "Completato";
+    roundEl.textContent = "2";
+    pickEl.textContent = `${order.length}/${order.length}`;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Draft completato";
+  } else {
+    userEl.textContent = order[state.pickIndex] || "–";
+    roundEl.textContent = String(state.round);
+    pickEl.textContent = `${state.pickIndex + 1}/${order.length}`;
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Conferma scelta";
+  }
+}
+
+function getSelectedPlayerName() {
+  const search = document.getElementById("playerSearch");
+  const select = document.getElementById("playerSelect");
+  const typed = search.value.trim();
+  if (typed) return typed;
+  const selected = select.value.trim();
+  return selected || "";
+}
+
+function clearInputs() {
+  document.getElementById("playerSearch").value = "";
+  document.getElementById("playerSelect").value = "";
+}
+
+function nextTurn(state) {
+  const order = getCurrentOrder(state.round);
+  const isEndOfRound = state.pickIndex >= order.length - 1;
+  if (isEndOfRound) {
+    if (state.round === 1) {
+      state.round = 2;
+      state.pickIndex = 0;
+    } else {
+      // Completed both rounds; lock further picks
+      state.pickIndex = order.length - 1;
+    }
+  } else {
+    state.pickIndex += 1;
+  }
+}
+
+function prevTurn(state) {
+  if (state.round === 2 && state.pickIndex === 0) {
+    state.round = 1;
+    state.pickIndex = getCurrentOrder(1).length - 1;
+    return;
+  }
+  if (state.pickIndex > 0) {
+    state.pickIndex -= 1;
+  }
+}
+
+function init() {
+  const state = loadState();
+  const boardsRoot = document.getElementById("boards");
+  const confirmBtn = document.getElementById("confirmBtn");
+  const undoBtn = document.getElementById("undoBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const meSelect = document.getElementById("meSelect");
+  const setMeBtn = document.getElementById("setMeBtn");
+  const meStatus = document.getElementById("meStatus");
+  const ghTokenInput = document.getElementById("ghToken");
+  const setGhBtn = document.getElementById("setGhBtn");
+
+  let allPlayers = [];
+  let me = localStorage.getItem("fantadraft_me") || "";
+  let ghToken = localStorage.getItem("fantadraft_gh_token") || "";
+
+  fetchPlayers().then(players => {
+    allPlayers = players;
+    const available = computeAvailablePlayers(allPlayers, state);
+    populateSelectors(available);
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  }).catch(err => {
+    alert("Errore nel caricamento dei giocatori: " + err.message);
+  });
+
+  // populate me select
+  meSelect.innerHTML = FRIENDS_ORDER_ROUND_1.map(name => `<option value="${name}">${name}</option>`).join("");
+  if (me) meSelect.value = me;
+
+  setMeBtn.addEventListener("click", () => {
+    me = meSelect.value;
+    localStorage.setItem("fantadraft_me", me);
+    meStatus.textContent = firebaseAvailable() ? `Online: ${me}` : `Solo locale: ${me}`;
+  });
+
+  if (ghToken) ghTokenInput.value = ghToken;
+  setGhBtn.addEventListener("click", () => {
+    ghToken = ghTokenInput.value.trim();
+    localStorage.setItem("fantadraft_gh_token", ghToken);
+    updateBackendStatusLabel();
+  });
+
+  confirmBtn.addEventListener("click", () => {
+    if (isDraftCompleted(state)) return;
+    const order = getCurrentOrder(state.round);
+    const currentUser = order[state.pickIndex];
+    if (!currentUser) {
+      alert("Draft completato o stato non valido");
+      return;
+    }
+
+    const selectedName = getSelectedPlayerName();
+    if (!selectedName) {
+      alert("Seleziona un giocatore");
+      return;
+    }
+
+    const available = computeAvailablePlayers(allPlayers, state);
+    const player = available.find(p => p.name.toLowerCase() === selectedName.toLowerCase());
+    if (!player) {
+      alert("Giocatore non disponibile (forse già scelto)");
+      return;
+    }
+
+    // Enforce turno: puoi scegliere solo se sei il currentUser
+    if (me && me !== currentUser) {
+      alert(`Tocca a ${currentUser}. Tu sei ${me}.`);
+      return;
+    }
+
+    applyPick({ player, by: currentUser });
+  });
+
+  undoBtn.addEventListener("click", () => {
+    if (state.takenPlayers.length === 0) return;
+    const last = state.takenPlayers[state.takenPlayers.length - 1];
+    // Only allow undo if sei tu l'ultimo aver scelto (quando me è settato)
+    if (me && last.by !== me) {
+      alert(`L'ultima scelta è di ${last.by}. Solo lui può annullare.`);
+      return;
+    }
+    applyUndo();
+  });
+
+  resetBtn.addEventListener("click", () => {
+    if (!confirm("Sei sicuro di voler resettare il draft?")) return;
+    applyReset();
+  });
+  
+  // --- Sync Layer ---
+  function firebaseAvailable() {
+    return Boolean(window.firebaseConfig);
+  }
+  function sheetsAvailable() {
+    return Boolean(window.sheetsScriptUrl);
+  }
+
+  let unsub = null;
+  if (githubAvailable()) {
+    initGithubSync();
+  } else if (sheetsAvailable()) {
+    initSheetsSync();
+  } else if (firebaseAvailable()) {
+    initFirebaseSync();
+  } else {
+    meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
+  }
+
+  // --- Google Sheets / Apps Script backend ---
+  function initSheetsSync() {
+    meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
+    const baseUrl = window.sheetsScriptUrl;
+
+    // Polling per stati remoti ogni 2s
+    const poll = async () => {
+      try {
+        const res = await fetch(`${baseUrl}?room=${encodeURIComponent(ROOM_ID)}&action=get`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('resp');
+        const data = await res.json();
+        if (!data || !data.state) return;
+        const remote = data.state;
+        const remoteLen = Array.isArray(remote.takenPlayers) ? remote.takenPlayers.length : 0;
+        const localLen = state.takenPlayers.length;
+        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
+          state.round = remote.round ?? 1;
+          state.pickIndex = remote.pickIndex ?? 0;
+          state.takenPlayers = Array.isArray(remote.takenPlayers) ? remote.takenPlayers : [];
+          saveState(state);
+          populateSelectors(computeAvailablePlayers(allPlayers, state));
+          updateStatus(state);
+          buildBoards(boardsRoot, state);
+        }
+      } catch {}
+    };
+    const pollId = setInterval(poll, 2000);
+    poll();
+
+    async function pushToRemote(newState) {
+      try {
+        await fetch(baseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room: ROOM_ID, action: 'set', state: newState })
+        });
+      } catch {}
+    }
+
+    // Wire actions
+    applyPick = ({ player, by }) => {
+      state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+      nextTurn(state);
+      saveState(state);
+      pushToRemote(state);
+      clearInputs();
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    };
+    applyUndo = () => {
+      state.takenPlayers.pop();
+      prevTurn(state);
+      saveState(state);
+      pushToRemote(state);
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    };
+    applyReset = () => {
+      state.round = 1;
+      state.pickIndex = 0;
+      state.takenPlayers = [];
+      saveState(state);
+      pushToRemote(state);
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    };
+  }
+
+  function initFirebaseSync() {
+    meStatus.textContent = me ? `Online: ${me}` : `Online`;
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js").then(() =>
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js")
+    ).then(() => import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js")).then(() => {
+      const app = firebase.initializeApp(window.firebaseConfig);
+      const db = firebase.firestore();
+      const auth = firebase.auth();
+
+      auth.signInAnonymously().catch(() => {});
+
+      const docRef = db.collection("fantadraft_rooms").doc(ROOM_ID);
+
+      // Subscribe remote changes
+      unsub = docRef.onSnapshot(snap => {
+        const data = snap.data();
+        if (!data) return;
+        const remote = {
+          round: data.round ?? 1,
+          pickIndex: data.pickIndex ?? 0,
+          takenPlayers: Array.isArray(data.takenPlayers) ? data.takenPlayers : []
+        };
+        // If remote is newer, adopt it
+        const localLen = state.takenPlayers.length;
+        const remoteLen = remote.takenPlayers.length;
+        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
+          state.round = remote.round;
+          state.pickIndex = remote.pickIndex;
+          state.takenPlayers = remote.takenPlayers;
+          saveState(state);
+          populateSelectors(computeAvailablePlayers(allPlayers, state));
+          updateStatus(state);
+          buildBoards(boardsRoot, state);
+        }
+      });
+
+      // Bootstrap doc if missing
+      docRef.get().then(snap => {
+        if (!snap.exists) {
+          docRef.set({ round: state.round, pickIndex: state.pickIndex, takenPlayers: state.takenPlayers });
+        }
+      });
+
+      // Write helpers
+      function pushToRemote(newState) {
+        docRef.set({ round: newState.round, pickIndex: newState.pickIndex, takenPlayers: newState.takenPlayers });
+      }
+
+      // Expose actions using remote when online
+      applyPick = ({ player, by }) => {
+        state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+        nextTurn(state);
+        saveState(state);
+        pushToRemote(state);
+        clearInputs();
+        populateSelectors(computeAvailablePlayers(allPlayers, state));
+        updateStatus(state);
+        buildBoards(boardsRoot, state);
+      };
+
+      applyUndo = () => {
+        state.takenPlayers.pop();
+        prevTurn(state);
+        saveState(state);
+        pushToRemote(state);
+        populateSelectors(computeAvailablePlayers(allPlayers, state));
+        updateStatus(state);
+        buildBoards(boardsRoot, state);
+      };
+
+      applyReset = () => {
+        state.round = 1;
+        state.pickIndex = 0;
+        state.takenPlayers = [];
+        saveState(state);
+        pushToRemote(state);
+        populateSelectors(computeAvailablePlayers(allPlayers, state));
+        updateStatus(state);
+        buildBoards(boardsRoot, state);
+      };
+    }).catch(err => {
+      console.error("Firebase init error", err);
+      meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
+    });
+  }
+
+  // Local-only fallback implementations (shadowed if online)
+  let applyPick = ({ player, by }) => {
+    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+    nextTurn(state);
+    saveState(state);
+    clearInputs();
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  let applyUndo = () => {
+    state.takenPlayers.pop();
+    prevTurn(state);
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  let applyReset = () => {
+    state.round = 1;
+    state.pickIndex = 0;
+    state.takenPlayers = [];
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+}
+
+// --- GitHub backend (file JSON nel repo) ---
+function githubAvailable() {
+  return Boolean(window.githubRepo && window.githubRepo.enabled);
+}
+
+async function githubFetchState() {
+  const { owner, repo, statePath, branch } = window.githubRepo;
+  const apiUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${statePath}`;
+  const res = await fetch(apiUrl, { cache: 'no-store' });
+  if (!res.ok) return null;
+  try {
+    const data = await res.json();
+    return data;
+  } catch { return null; }
+}
+
+async function githubWriteState(token, newState) {
+  const { owner, repo, statePath, branch } = window.githubRepo;
+  const getUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(statePath)}?ref=${branch}`;
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/vnd.github+json'
+  };
+  const getRes = await fetch(getUrl, { headers });
+  let sha = undefined;
+  if (getRes.ok) {
+    const meta = await getRes.json();
+    sha = meta.sha;
+  }
+  const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(statePath)}`;
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(newState, null, 2))));
+  const body = {
+    message: `update state ${new Date().toISOString()}`,
+    content,
+    branch,
+    sha
+  };
+  const putRes = await fetch(putUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+  if (!putRes.ok) {
+    const txt = await putRes.text();
+    throw new Error(`GitHub write failed: ${txt}`);
+  }
+}
+
+function updateBackendStatusLabel() {
+  const meStatus = document.getElementById("meStatus");
+  const me = localStorage.getItem("fantadraft_me") || "";
+  if (githubAvailable()) {
+    meStatus.textContent = me ? `Online (GitHub): ${me}` : `Online (GitHub)`;
+  } else if (window.sheetsScriptUrl) {
+    meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
+  } else if (window.firebaseConfig) {
+    meStatus.textContent = me ? `Online: ${me}` : `Online`;
+  } else {
+    meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
+  }
+}
+
+function initGithubSync() {
+  updateBackendStatusLabel();
+  const boardsRoot = document.getElementById("boards");
+  const state = loadState();
+  let allPlayers = [];
+  fetchPlayers().then(players => { allPlayers = players; });
+
+  const poll = async () => {
+    try {
+      const remote = await githubFetchState();
+      if (!remote) return;
+      const local = state;
+      const remoteLen = Array.isArray(remote.takenPlayers) ? remote.takenPlayers.length : 0;
+      const localLen = local.takenPlayers.length;
+      if (remoteLen !== localLen || remote.round !== local.round || remote.pickIndex !== local.pickIndex) {
+        local.round = remote.round ?? 1;
+        local.pickIndex = remote.pickIndex ?? 0;
+        local.takenPlayers = Array.isArray(remote.takenPlayers) ? remote.takenPlayers : [];
+        saveState(local);
+        populateSelectors(computeAvailablePlayers(allPlayers, local));
+        updateStatus(local);
+        buildBoards(boardsRoot, local);
+      }
+    } catch {}
+  };
+  const timer = setInterval(poll, 2500);
+  poll();
+
+  // Override actions to write to GitHub if token presente
+  const original = {
+    applyPick,
+    applyUndo,
+    applyReset
+  };
+
+  applyPick = async ({ player, by }) => {
+    const token = localStorage.getItem("fantadraft_gh_token") || "";
+    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+    nextTurn(state);
+    saveState(state);
+    try {
+      if (token) await githubWriteState(token, state);
+    } catch (e) { alert("Errore salvataggio GitHub: " + e.message); }
+    clearInputs();
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  applyUndo = async () => {
+    const token = localStorage.getItem("fantadraft_gh_token") || "";
+    state.takenPlayers.pop();
+    prevTurn(state);
+    saveState(state);
+    try {
+      if (token) await githubWriteState(token, state);
+    } catch (e) { alert("Errore salvataggio GitHub: " + e.message); }
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  applyReset = async () => {
+    const token = localStorage.getItem("fantadraft_gh_token") || "";
+    state.round = 1;
+    state.pickIndex = 0;
+    state.takenPlayers = [];
+    saveState(state);
+    try {
+      if (token) await githubWriteState(token, state);
+    } catch (e) { alert("Errore salvataggio GitHub: " + e.message); }
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+}
+
+document.addEventListener("DOMContentLoaded", init);
+
+
