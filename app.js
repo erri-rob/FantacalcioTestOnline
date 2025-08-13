@@ -73,11 +73,20 @@ async function fetchPlayers() {
 
 function buildBoards(rootEl, state) {
   const allFriends = FRIENDS_ORDER_ROUND_1; // names list base
+  const order = getCurrentOrder(state.round);
+  const currentUser = isDraftCompleted(state) ? null : order[state.pickIndex];
+  
   rootEl.innerHTML = "";
   allFriends.forEach(friend => {
     const picks = state.takenPlayers.filter(tp => tp.by === friend);
     const card = document.createElement("div");
     card.className = "board-card";
+    
+    // Aggiungi classe current-turn se è il turno di questa persona
+    if (friend === currentUser) {
+      card.classList.add("current-turn");
+    }
+    
     card.innerHTML = `
       <div class="board-header">
         <div class="board-title">${friend}</div>

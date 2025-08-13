@@ -99,6 +99,13 @@ input::placeholder { color: #82969e; }
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 12px;
+  transition: all 0.3s ease;
+}
+
+.board-card.current-turn {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  background: linear-gradient(180deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02));
 }
 .board-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .board-title { font-weight: 600; }
