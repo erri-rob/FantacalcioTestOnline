@@ -256,6 +256,11 @@ function init() {
       populateSelectors(computeAvailablePlayers(allPlayers, state));
       updateStatus(state);
       buildBoards(boardsRoot, state);
+      
+      // Mostra avviso di conferma dopo che tutto è stato aggiornato
+      setTimeout(() => {
+        alert(`Scelta salvata! ${player.name} (${player.role}) è stato selezionato da ${by}.\n\nAttendi qualche secondo per far aggiornare il sistema.`);
+      }, 100);
     });
   }
 
@@ -427,10 +432,6 @@ function init() {
     }
 
     console.log("Chiamando applyPick con:", { player, by: currentUser });
-    
-    // Mostra avviso di conferma
-    alert(`Scelta salvata! ${player.name} (${player.role}) è stato selezionato da ${currentUser}.\n\nAttendi qualche secondo per far aggiornare il sistema.`);
-    
     applyPick({ player, by: currentUser });
   });
 
