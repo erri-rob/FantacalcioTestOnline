@@ -76,7 +76,9 @@ function buildBoards(rootEl, state) {
   const order = getCurrentOrder(state.round);
   const currentUser = isDraftCompleted(state) ? null : order[state.pickIndex];
   
-  rootEl.innerHTML = "";
+  // Ottimizzazione per Safari mobile: usa DocumentFragment per ridurre reflow
+  const fragment = document.createDocumentFragment();
+  
   allFriends.forEach(friend => {
     const picks = state.takenPlayers.filter(tp => tp.by === friend);
     const card = document.createElement("div");
@@ -105,8 +107,12 @@ function buildBoards(rootEl, state) {
         .join("")}
       </div>
     `;
-    rootEl.appendChild(card);
+    fragment.appendChild(card);
   });
+  
+  // Sostituisci tutto il contenuto in una sola operazione
+  rootEl.innerHTML = "";
+  rootEl.appendChild(fragment);
 }
 
 function isDraftCompleted(state) {
@@ -244,9 +250,13 @@ function init() {
     nextTurn(state);
     saveState(state);
     clearInputs();
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
+    
+    // Ottimizzazione per Safari mobile: raggruppa le operazioni DOM
+    requestAnimationFrame(() => {
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    });
   }
 
   function applyUndo() {
@@ -254,9 +264,13 @@ function init() {
     state.takenPlayers.pop();
     prevTurn(state);
     saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
+    
+    // Ottimizzazione per Safari mobile: raggruppa le operazioni DOM
+    requestAnimationFrame(() => {
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    });
   }
 
   function applyReset() {
@@ -265,9 +279,13 @@ function init() {
     state.pickIndex = 0;
     state.takenPlayers = [];
     saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
+    
+    // Ottimizzazione per Safari mobile: raggruppa le operazioni DOM
+    requestAnimationFrame(() => {
+      populateSelectors(computeAvailablePlayers(allPlayers, state));
+      updateStatus(state);
+      buildBoards(boardsRoot, state);
+    });
   }
 
   // --- Google Sheets / Apps Script backend ---
@@ -276,7 +294,7 @@ function init() {
     meStatus.textContent = selectedMe ? `Online (Sheets): ${selectedMe}` : `Online (Sheets)`;
     const baseUrl = window.sheetsScriptUrl;
 
-    // Polling per stati remoti ogni 2s
+    // Polling per stati remoti ogni 3s (ridotto per Safari mobile)
     const poll = async () => {
       try {
         const res = await fetch(`${baseUrl}?room=${encodeURIComponent(ROOM_ID)}&action=get`, { cache: 'no-store' });
@@ -291,13 +309,17 @@ function init() {
           state.pickIndex = remote.pickIndex ?? 0;
           state.takenPlayers = Array.isArray(remote.takenPlayers) ? remote.takenPlayers : [];
           saveState(state);
-          populateSelectors(computeAvailablePlayers(allPlayers, state));
-          updateStatus(state);
-          buildBoards(boardsRoot, state);
+          
+          // Ottimizzazione per Safari mobile: raggruppa le operazioni DOM
+          requestAnimationFrame(() => {
+            populateSelectors(computeAvailablePlayers(allPlayers, state));
+            updateStatus(state);
+            buildBoards(boardsRoot, state);
+          });
         }
       } catch {}
     };
-    const pollId = setInterval(poll, 2000);
+    const pollId = setInterval(poll, 3000);
     poll();
 
     async function pushToRemote(newState) {
