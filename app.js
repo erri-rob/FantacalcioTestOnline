@@ -187,14 +187,28 @@ function nextTurn(state) {
 }
 
 function prevTurn(state) {
+  const order = getCurrentOrder(state.round);
+  
+  // Se siamo al round 2 e al primo pick, torna all'ultimo del round 1
   if (state.round === 2 && state.pickIndex === 0) {
     state.round = 1;
     state.pickIndex = getCurrentOrder(1).length - 1;
     return;
   }
-  if (state.pickIndex > 0) {
+  
+  // Se siamo al round 2 e non al primo pick, diminuisci pickIndex
+  if (state.round === 2 && state.pickIndex > 0) {
     state.pickIndex -= 1;
+    return;
   }
+  
+  // Se siamo al round 1 e non al primo pick, diminuisci pickIndex
+  if (state.round === 1 && state.pickIndex > 0) {
+    state.pickIndex -= 1;
+    return;
+  }
+  
+  // Se siamo al round 1 e al primo pick, non fare nulla (non possiamo andare indietro)
 }
 
 function init() {
