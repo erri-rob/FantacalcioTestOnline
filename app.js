@@ -425,13 +425,14 @@ function init() {
 
   undoBtn.addEventListener("click", () => {
     if (state.takenPlayers.length === 0) return;
-    const last = state.takenPlayers[state.takenPlayers.length - 1];
-    // Only allow undo if sei tu l'ultimo aver scelto (quando me è settato)
-    const selectedMe = meSelect.value;
-    if (selectedMe && last.by !== selectedMe) {
-      alert(`L'ultima scelta è di ${last.by}. Solo lui può annullare.`);
+    
+    const password = prompt("Inserisci la password per annullare l'ultima scelta:");
+    if (password !== "fantapazz") {
+      alert("Password errata. Annullamento non eseguito.");
       return;
     }
+    
+    if (!confirm("Sei sicuro di voler annullare l'ultima scelta?")) return;
     applyUndo();
   });
 
