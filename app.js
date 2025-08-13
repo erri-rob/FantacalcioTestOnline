@@ -206,12 +206,9 @@ function init() {
   const meSelect = document.getElementById("meSelect");
   const setMeBtn = document.getElementById("setMeBtn");
   const meStatus = document.getElementById("meStatus");
-  const ghTokenInput = document.getElementById("ghToken");
-  const setGhBtn = document.getElementById("setGhBtn");
 
   let allPlayers = [];
   let me = localStorage.getItem("fantadraft_me") || "";
-  let ghToken = localStorage.getItem("fantadraft_gh_token") || "";
 
   fetchPlayers().then(players => {
     allPlayers = players;
@@ -230,17 +227,18 @@ function init() {
   setMeBtn.addEventListener("click", () => {
     me = meSelect.value;
     localStorage.setItem("fantadraft_me", me);
-    meStatus.textContent = firebaseAvailable() ? `Online: ${me}` : `Solo locale: ${me}`;
+    if (sheetsAvailable()) {
+      meStatus.textContent = `Online (Sheets): ${me}`;
+    } else if (firebaseAvailable()) {
+      meStatus.textContent = `Online: ${me}`;
+    } else {
+      meStatus.textContent = `Solo locale: ${me}`;
+    }
   });
 
-  if (ghToken) ghTokenInput.value = ghToken;
-  setGhBtn.addEventListener("click", () => {
-    ghToken = ghTokenInput.value.trim();
-    localStorage.setItem("fantadraft_gh_token", ghToken);
-    updateBackendStatusLabel();
-  });
 
   confirmBtn.addEventListener("click", () => {
+    console.log("Conferma cliccata");
     if (isDraftCompleted(state)) return;
     const order = getCurrentOrder(state.round);
     const currentUser = order[state.pickIndex];
@@ -268,6 +266,7 @@ function init() {
       return;
     }
 
+    console.log("Chiamando applyPick con:", { player, by: currentUser });
     applyPick({ player, by: currentUser });
   });
 
@@ -295,10 +294,39 @@ function init() {
     return Boolean(window.sheetsScriptUrl);
   }
 
+  // Local-only fallback implementations (shadowed if online)
+  let applyPick = ({ player, by }) => {
+    console.log("applyPick locale chiamata con:", { player, by });
+    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
+    nextTurn(state);
+    saveState(state);
+    clearInputs();
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  let applyUndo = () => {
+    console.log("applyUndo locale chiamata");
+    state.takenPlayers.pop();
+    prevTurn(state);
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+  let applyReset = () => {
+    console.log("applyReset locale chiamata");
+    state.round = 1;
+    state.pickIndex = 0;
+    state.takenPlayers = [];
+    saveState(state);
+    populateSelectors(computeAvailablePlayers(allPlayers, state));
+    updateStatus(state);
+    buildBoards(boardsRoot, state);
+  };
+
   let unsub = null;
-  if (githubAvailable()) {
-    initGithubSync();
-  } else if (sheetsAvailable()) {
+  if (sheetsAvailable()) {
     initSheetsSync();
   } else if (firebaseAvailable()) {
     initFirebaseSync();
@@ -463,167 +491,10 @@ function init() {
     });
   }
 
-  // Local-only fallback implementations (shadowed if online)
-  let applyPick = ({ player, by }) => {
-    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-    nextTurn(state);
-    saveState(state);
-    clearInputs();
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  let applyUndo = () => {
-    state.takenPlayers.pop();
-    prevTurn(state);
-    saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  let applyReset = () => {
-    state.round = 1;
-    state.pickIndex = 0;
-    state.takenPlayers = [];
-    saveState(state);
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
+
 }
 
-// --- GitHub backend (file JSON nel repo) ---
-function githubAvailable() {
-  return Boolean(window.githubRepo && window.githubRepo.enabled);
-}
 
-async function githubFetchState() {
-  const { owner, repo, statePath, branch } = window.githubRepo;
-  const apiUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${statePath}`;
-  const res = await fetch(apiUrl, { cache: 'no-store' });
-  if (!res.ok) return null;
-  try {
-    const data = await res.json();
-    return data;
-  } catch { return null; }
-}
-
-async function githubWriteState(token, newState) {
-  const { owner, repo, statePath, branch } = window.githubRepo;
-  const getUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(statePath)}?ref=${branch}`;
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Accept': 'application/vnd.github+json'
-  };
-  const getRes = await fetch(getUrl, { headers });
-  let sha = undefined;
-  if (getRes.ok) {
-    const meta = await getRes.json();
-    sha = meta.sha;
-  }
-  const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(statePath)}`;
-  const content = btoa(unescape(encodeURIComponent(JSON.stringify(newState, null, 2))));
-  const body = {
-    message: `update state ${new Date().toISOString()}`,
-    content,
-    branch,
-    sha
-  };
-  const putRes = await fetch(putUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-  if (!putRes.ok) {
-    const txt = await putRes.text();
-    throw new Error(`GitHub write failed: ${txt}`);
-  }
-}
-
-function updateBackendStatusLabel() {
-  const meStatus = document.getElementById("meStatus");
-  const me = localStorage.getItem("fantadraft_me") || "";
-  if (githubAvailable()) {
-    meStatus.textContent = me ? `Online (GitHub): ${me}` : `Online (GitHub)`;
-  } else if (window.sheetsScriptUrl) {
-    meStatus.textContent = me ? `Online (Sheets): ${me}` : `Online (Sheets)`;
-  } else if (window.firebaseConfig) {
-    meStatus.textContent = me ? `Online: ${me}` : `Online`;
-  } else {
-    meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
-  }
-}
-
-function initGithubSync() {
-  updateBackendStatusLabel();
-  const boardsRoot = document.getElementById("boards");
-  const state = loadState();
-  let allPlayers = [];
-  fetchPlayers().then(players => { allPlayers = players; });
-
-  const poll = async () => {
-    try {
-      const remote = await githubFetchState();
-      if (!remote) return;
-      const local = state;
-      const remoteLen = Array.isArray(remote.takenPlayers) ? remote.takenPlayers.length : 0;
-      const localLen = local.takenPlayers.length;
-      if (remoteLen !== localLen || remote.round !== local.round || remote.pickIndex !== local.pickIndex) {
-        local.round = remote.round ?? 1;
-        local.pickIndex = remote.pickIndex ?? 0;
-        local.takenPlayers = Array.isArray(remote.takenPlayers) ? remote.takenPlayers : [];
-        saveState(local);
-        populateSelectors(computeAvailablePlayers(allPlayers, local));
-        updateStatus(local);
-        buildBoards(boardsRoot, local);
-      }
-    } catch {}
-  };
-  const timer = setInterval(poll, 2500);
-  poll();
-
-  // Override actions to write to GitHub if token presente
-  const original = {
-    applyPick,
-    applyUndo,
-    applyReset
-  };
-
-  applyPick = async ({ player, by }) => {
-    const token = localStorage.getItem("fantadraft_gh_token") || "";
-    state.takenPlayers.push({ name: player.name, role: player.role, team: player.team, by });
-    nextTurn(state);
-    saveState(state);
-    try {
-      if (token) await githubWriteState(token, state);
-    } catch (e) { alert("Errore salvataggio GitHub: " + e.message); }
-    clearInputs();
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  applyUndo = async () => {
-    const token = localStorage.getItem("fantadraft_gh_token") || "";
-    state.takenPlayers.pop();
-    prevTurn(state);
-    saveState(state);
-    try {
-      if (token) await githubWriteState(token, state);
-    } catch (e) { alert("Errore salvataggio GitHub: " + e.message); }
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-  applyReset = async () => {
-    const token = localStorage.getItem("fantadraft_gh_token") || "";
-    state.round = 1;
-    state.pickIndex = 0;
-    state.takenPlayers = [];
-    saveState(state);
-    try {
-      if (token) await githubWriteState(token, state);
-    } catch (e) { alert("Errore salvataggio GitHub: " + e.message); }
-    populateSelectors(computeAvailablePlayers(allPlayers, state));
-    updateStatus(state);
-    buildBoards(boardsRoot, state);
-  };
-}
 
 document.addEventListener("DOMContentLoaded", init);
 
