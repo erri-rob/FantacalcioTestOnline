@@ -211,9 +211,6 @@ function init() {
   let me = localStorage.getItem("fantadraft_me") || "";
 
   // --- Helper functions ---
-  function firebaseAvailable() {
-    return Boolean(window.firebaseConfig);
-  }
   function sheetsAvailable() {
     return Boolean(window.sheetsScriptUrl);
   }
@@ -282,12 +279,19 @@ function init() {
 
     async function pushToRemote(newState) {
       try {
-        await fetch(baseUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ room: ROOM_ID, action: 'set', state: newState })
+        // Use GET with query params to avoid CORS preflight
+        const params = new URLSearchParams({
+          room: ROOM_ID,
+          action: 'set',
+          state: JSON.stringify(newState)
         });
-      } catch {}
+        await fetch(`${baseUrl}?${params.toString()}`, { 
+          method: 'GET',
+          cache: 'no-store'
+        });
+      } catch (err) {
+        console.warn("Errore sincronizzazione Google Sheets:", err);
+      }
     }
 
     // Override actions to write to Google Sheets
@@ -309,86 +313,13 @@ function init() {
     };
   }
 
-  // --- Firebase backend ---
-  function initFirebaseSync() {
-    meStatus.textContent = me ? `Online: ${me}` : `Online`;
-    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js").then(() =>
-      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js")
-    ).then(() => import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js")).then(() => {
-      const app = firebase.initializeApp(window.firebaseConfig);
-      const db = firebase.firestore();
-      const auth = firebase.auth();
 
-      auth.signInAnonymously().catch(() => {});
-
-      const docRef = db.collection("fantadraft_rooms").doc(ROOM_ID);
-
-      // Subscribe remote changes
-      unsub = docRef.onSnapshot(snap => {
-        const data = snap.data();
-        if (!data) return;
-        const remote = {
-          round: data.round ?? 1,
-          pickIndex: data.pickIndex ?? 0,
-          takenPlayers: Array.isArray(data.takenPlayers) ? data.takenPlayers : []
-        };
-        // If remote is newer, adopt it
-        const localLen = state.takenPlayers.length;
-        const remoteLen = remote.takenPlayers.length;
-        if (remoteLen !== localLen || remote.round !== state.round || remote.pickIndex !== state.pickIndex) {
-          state.round = remote.round;
-          state.pickIndex = remote.pickIndex;
-          state.takenPlayers = remote.takenPlayers;
-          saveState(state);
-          populateSelectors(computeAvailablePlayers(allPlayers, state));
-          updateStatus(state);
-          buildBoards(boardsRoot, state);
-        }
-      });
-
-      // Bootstrap doc if missing
-      docRef.get().then(snap => {
-        if (!snap.exists) {
-          docRef.set({ round: state.round, pickIndex: state.pickIndex, takenPlayers: state.takenPlayers });
-        }
-      });
-
-      // Write helpers
-      function pushToRemote(newState) {
-        docRef.set({ round: newState.round, pickIndex: newState.pickIndex, takenPlayers: newState.takenPlayers });
-      }
-
-      // Override actions using remote when online
-      const originalApplyPick = applyPick;
-      const originalApplyUndo = applyUndo;
-      const originalApplyReset = applyReset;
-
-      applyPick = ({ player, by }) => {
-        originalApplyPick({ player, by });
-        pushToRemote(state);
-      };
-      applyUndo = () => {
-        originalApplyUndo();
-        pushToRemote(state);
-      };
-      applyReset = () => {
-        originalApplyReset();
-        pushToRemote(state);
-      };
-    }).catch(err => {
-      console.error("Firebase init error", err);
-      meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
-    });
-  }
 
 
 
   // --- Initialize sync layer ---
-  let unsub = null;
   if (sheetsAvailable()) {
     initSheetsSync();
-  } else if (firebaseAvailable()) {
-    initFirebaseSync();
   } else {
     meStatus.textContent = me ? `Solo locale: ${me}` : `Solo locale`;
   }
@@ -413,8 +344,6 @@ function init() {
     localStorage.setItem("fantadraft_me", me);
     if (sheetsAvailable()) {
       meStatus.textContent = `Online (Sheets): ${me}`;
-    } else if (firebaseAvailable()) {
-      meStatus.textContent = `Online: ${me}`;
     } else {
       meStatus.textContent = `Solo locale: ${me}`;
     }
