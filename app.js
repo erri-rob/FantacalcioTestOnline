@@ -87,7 +87,7 @@ function buildBoards(rootEl, state) {
         .map(
           (p, idx) => `
             <div class="pick-item">
-              <span class="badge">${p.role}</span>
+              <span class="badge role-${p.role.toLowerCase()}">${p.role}</span>
               <span class="player-name">${p.name}</span>
               <span class="player-meta">${p.team || ""}</span>
             </div>

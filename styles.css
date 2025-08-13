@@ -112,7 +112,11 @@ input::placeholder { color: #82969e; }
 }
 .picks-list { display: grid; gap: 6px; }
 .pick-item { display: flex; gap: 8px; align-items: center; }
-.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #0b332d; color: #5af2c3; border: 1px solid #0e564b; }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
+.badge.role-p { background: #7c2d12; color: #fed7aa; border-color: #ea580c; }
+.badge.role-d { background: #1e3a8a; color: #bfdbfe; border-color: #3b82f6; }
+.badge.role-c { background: #7f1d1d; color: #fecaca; border-color: #dc2626; }
+.badge.role-a { background: #166534; color: #bbf7d0; border-color: #16a34a; }
 .player-name { font-weight: 600; }
 .player-meta { color: var(--muted); font-size: 12px; }
 

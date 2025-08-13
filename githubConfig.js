@@ -8,6 +8,11 @@
 //   statePath: "state.json",
 //   enabled: true
 // };
-window.githubRepo = window.githubRepo || null;
-
+window.githubRepo = {
+    owner: "erri-rob",
+    repo: "FantacalcioTestOnline",
+    branch: "main",
+    statePath: "state.json",
+    enabled: true
+  };
 
