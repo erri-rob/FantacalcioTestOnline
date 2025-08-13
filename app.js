@@ -54,22 +54,7 @@ function getCurrentOrder(round) {
   return round === 1 ? FRIENDS_ORDER_ROUND_1 : FRIENDS_ORDER_ROUND_2;
 }
 
-function showConfirmationAlert(player, by) {
-  const alertEl = document.getElementById("confirmationAlert");
-  const messageEl = document.getElementById("confirmationMessage");
-  
-  if (alertEl && messageEl) {
-    messageEl.textContent = `${player.name} (${player.role}) è stato selezionato da ${by}.`;
-    
-    // Mostra l'avviso
-    alertEl.classList.add("show");
-    
-    // Nascondi automaticamente dopo 4 secondi
-    setTimeout(() => {
-      alertEl.classList.remove("show");
-    }, 4000);
-  }
-}
+
 
 async function fetchPlayers() {
   const response = await fetch("./Listone_Fantapazz.json", { cache: "no-store" });
@@ -274,8 +259,10 @@ function init() {
       updateStatus(state);
       buildBoards(boardsRoot, state);
       
-      // Mostra avviso personalizzato dopo che tutto è stato aggiornato
-      showConfirmationAlert(player, by);
+      // Mostra alert di conferma dopo che tutto è stato aggiornato
+      setTimeout(() => {
+        alert(`Scelta salvata! ${player.name} (${player.role}) è stato selezionato da ${by}.\n\nAttendi qualche secondo per far aggiornare il sistema.`);
+      }, 100);
     });
   }
 
